@@ -1,138 +1,148 @@
-// --- VIEWPORT FIX FOR MOBILE ---
-function updateViewportHeight() {
+// --- VIEWPORT FIX ---
+function updateVH() {
     let vh = window.innerHeight * 0.01;
     document.documentElement.style.setProperty('--vh', `${vh}px`);
 }
-window.addEventListener('resize', updateViewportHeight);
-window.addEventListener('orientationchange', updateViewportHeight);
-updateViewportHeight();
+window.addEventListener('resize', updateVH);
+updateVH();
 
-// --- CORE VARIABLES ---
+// --- VARIABLES ---
 const chatArea = document.getElementById('chatArea');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const menuBtn = document.getElementById('menuBtn');
-const closeBtn = document.getElementById('closeBtn');
 const sidebar = document.getElementById('sidebar');
-const overlay = document.getElementById('overlay');
-const ttBtn = document.getElementById('ttBtn');
-const ttUrl = document.getElementById('ttUrl');
-const ttResult = document.getElementById('ttResult');
+const instModal = document.getElementById('installerModal');
+const instTitle = document.getElementById('instTitle');
+const instStatus = document.getElementById('installStatus');
+const instProgress = document.getElementById('installProgress');
+const percentLabel = document.getElementById('percentLabel');
+const manualArea = document.getElementById('manualDownloadArea');
+const manualLink = document.getElementById('manualLink');
 
-let chatHistory = [];
 const API_KEY = "sk-Xwuy2wMYjTTZIUbBuHUewSsu6Na8RkUjBvYiDgHdJFTCw0aX";
 
-// --- MARKED RENDERER ---
-const renderer = new marked.Renderer();
-renderer.code = (codeBlock) => {
-    const codeText = typeof codeBlock === 'string' ? codeBlock : (codeBlock.text || '');
-    const id = 'code-' + Math.random().toString(36).substring(2, 11);
-    const escapedCode = codeText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    return `
-        <div class="code-block-wrapper">
-            <button class="copy-code-trigger" data-copy-id="${id}">
-                <i class="far fa-copy"></i> COPY
-            </button>
-            <pre><code id="${id}" class="language-text">${escapedCode}</code></pre>
-        </div>
-    `;
-};
-marked.setOptions({ renderer: renderer, breaks: true, gfm: true });
+// --- SIDEBAR ---
+menuBtn.onclick = () => sidebar.classList.add('open');
+document.getElementById('closeBtn').onclick = () => sidebar.classList.remove('open');
 
-// --- COPY FUNCTION ---
-document.addEventListener('click', (e) => {
-    const copyBtn = e.target.closest('.copy-code-trigger');
-    if (copyBtn) {
-        const codeId = copyBtn.getAttribute('data-copy-id');
-        const codeElement = document.getElementById(codeId);
-        if (codeElement) {
-            navigator.clipboard.writeText(codeElement.innerText).then(() => {
-                const originalHTML = copyBtn.innerHTML;
-                copyBtn.innerHTML = '<i class="fas fa-check"></i> COPIED';
-                setTimeout(() => { copyBtn.innerHTML = originalHTML; }, 1800);
-            });
-        }
-    }
-});
-
-// --- CHAT LOGIC ---
-function createBubble(text, role) {
-    const bubble = document.createElement('div');
-    bubble.className = `chat-bubble bubble-${role}`;
-    const content = document.createElement('div');
-    content.className = "markdown-content";
-    if (role === 'ai') { content.innerHTML = marked.parse(text); } 
-    else { content.innerText = text; }
-    bubble.appendChild(content);
-    chatArea.appendChild(bubble);
-    chatArea.scrollTop = chatArea.scrollHeight;
-    return bubble;
+// --- INSTALLER UI ---
+function startInstaller(title) {
+    instTitle.innerText = title;
+    instModal.classList.remove('hidden');
+    manualArea.classList.add('hidden');
+    instStatus.classList.remove('text-green-400', 'text-red-500');
+    updateProgress(10, "INITIALIZING...");
+    setTimeout(() => instModal.classList.add('opacity-100'), 10);
 }
 
-async function handleChat() {
+function updateProgress(p, status) {
+    instProgress.style.width = p + '%';
+    percentLabel.innerText = p + '%';
+    if(status) instStatus.innerText = status;
+}
+
+async function triggerDownload(url, filename) {
+    try {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const dUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = dUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return true;
+    } catch(e) { return false; }
+}
+
+// --- TIKTOK (VIDEO & AUDIO) ---
+async function downloadTikTok(mode) {
+    const url = document.getElementById('ttUrl').value.trim();
+    if(!url) return;
+    startInstaller(mode === 'audio' ? "INSTALLING SOUND" : "INSTALLING VIDEO");
+
+    try {
+        const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
+        const json = await res.json();
+        if(json.code === 0) {
+            const mediaUrl = mode === 'audio' ? json.data.music : json.data.play;
+            updateProgress(50, "CONNECTING TO NEURAL LINK...");
+            
+            manualLink.href = mediaUrl;
+            manualArea.classList.remove('hidden');
+
+            const success = await triggerDownload(mediaUrl, `X14_${Date.now()}.${mode === 'audio' ? 'mp3' : 'mp4'}`);
+            if(success) {
+                updateProgress(100, "INSTALLATION COMPLETE!");
+                instStatus.classList.add('text-green-400');
+            } else {
+                updateProgress(100, "AUTO INSTALL FAILED - USE MANUAL LINK");
+            }
+        }
+    } catch(e) { updateProgress(100, "ERROR: LINK INVALID"); instStatus.classList.add('text-red-500'); }
+}
+
+document.getElementById('ttBtn').onclick = () => downloadTikTok('video');
+document.getElementById('ttAudioBtn').onclick = () => downloadTikTok('audio');
+
+// --- SPOTIFY ---
+document.getElementById('spotBtn').onclick = async () => {
+    const url = document.getElementById('spotUrl').value.trim();
+    if(!url) return;
+    startInstaller("INSTALLING SPOTIFY TRACK");
+
+    try {
+        // Menggunakan API Spotify Downloader (Publik/DziyX Bypass)
+        const res = await fetch(`https://api.spotifydown.com/download/${url.split('track/')[1].split('?')[0]}`, {
+            headers: { 'Origin': 'https://spotifydown.com' }
+        });
+        const json = await res.json();
+        if(json.success) {
+            updateProgress(60, "SYNCING METADATA...");
+            manualLink.href = json.link;
+            manualArea.classList.remove('hidden');
+            
+            await triggerDownload(json.link, `${json.metadata.title}.mp3`);
+            updateProgress(100, "SYNC COMPLETE!");
+            instStatus.classList.add('text-green-400');
+        }
+    } catch(e) { updateProgress(100, "SPOTIFY SYNC FAILED"); instStatus.classList.add('text-red-500'); }
+};
+
+// --- CHAT ENGINE ---
+function createBubble(text, role) {
+    const b = document.createElement('div');
+    b.className = `chat-bubble bubble-${role}`;
+    b.innerHTML = role === 'ai' ? marked.parse(text) : text;
+    chatArea.appendChild(b);
+    chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+sendBtn.onclick = async () => {
     const text = userInput.value.trim();
     if(!text) return;
-
     createBubble(text, 'user');
     userInput.value = '';
-    userInput.style.height = 'auto';
-
-    const typingDiv = document.createElement('div');
-    typingDiv.className = 'chat-bubble bubble-ai flex gap-1.5 items-center px-5 py-3 w-16';
-    typingDiv.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
-    chatArea.appendChild(typingDiv);
-    chatArea.scrollTop = chatArea.scrollHeight;
+    const typing = document.createElement('div');
+    typing.className = 'chat-bubble bubble-ai w-16 flex gap-1 items-center justify-center';
+    typing.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+    chatArea.appendChild(typing);
 
     try {
         const response = await fetch("https://api.chatanywhere.tech/v1/chat/completions", {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": `Bearer ${API_KEY}` },
-            body: JSON.stringify({
-                model: "gpt-3.5-turbo",
-                messages: [
-                    {role: "system", content: "You are XFourteenAI, a Senior Software Engineer. Respond in user's language."},
-                    ...chatHistory.slice(-8),
-                    {role: "user", content: text}
-                ],
-                temperature: 0.3
-            })
+            body: JSON.stringify({ model: "gpt-3.5-turbo", messages: [{role: "user", content: text}] })
         });
         const data = await response.json();
-        const aiMsg = data.choices[0].message.content;
-        typingDiv.remove();
-        createBubble(aiMsg, 'ai');
-        chatHistory.push({role: "user", content: text}, {role: "assistant", content: aiMsg});
-    } catch (e) {
-        typingDiv.remove();
-        createBubble("⚠️ Connection error.", 'ai');
-    }
-}
-
-// --- TIKTOK DOWNLOADER ---
-ttBtn.onclick = async () => {
-    const url = ttUrl.value.trim();
-    if(!url) return;
-    ttBtn.disabled = true;
-    try {
-        const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
-        const res = await apiRes.json();
-        if(res.code === 0) {
-            window.open(res.data.play, '_blank');
-            ttResult.innerText = "✅ Download started";
-        }
-    } catch (e) { ttResult.innerText = "❌ Error"; }
-    ttBtn.disabled = false;
+        typing.remove();
+        createBubble(data.choices[0].message.content, 'ai');
+    } catch (e) { typing.remove(); createBubble("Neural connection disrupted.", "ai"); }
 };
 
-// --- EVENTS ---
-sendBtn.onclick = handleChat;
-userInput.onkeydown = (e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChat(); }};
-userInput.oninput = function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 140) + 'px'; };
-menuBtn.onclick = () => { sidebar.classList.add('open'); overlay.classList.remove('hidden'); setTimeout(()=>overlay.classList.add('opacity-100'),10); };
-closeBtn.onclick = () => { sidebar.classList.remove('open'); overlay.classList.remove('opacity-100'); setTimeout(()=>overlay.classList.add('hidden'),400); };
-overlay.onclick = closeBtn.onclick;
-
 window.onload = () => {
-    setTimeout(() => document.getElementById('loading')?.remove(), 1200);
-    setTimeout(() => createBubble("XFourteenAI active. How can I assist, Commander?", 'ai'), 300);
+    setTimeout(() => document.getElementById('loading').remove(), 1000);
+    createBubble("System ready. All download protocols (TikTok & Spotify) are active.", "ai");
 };
