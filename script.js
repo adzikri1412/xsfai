@@ -26,9 +26,8 @@ const API_KEY = "sk-Xwuy2wMYjTTZIUbBuHUewSsu6Na8RkUjBvYiDgHdJFTCw0aX";
 menuBtn.onclick = () => sidebar.classList.add('open');
 document.getElementById('closeBtn').onclick = () => sidebar.classList.remove('open');
 
-// --- FIXED INSTALLER UI FUNCTION ---
+// --- INSTALLER UI ---
 function startInstaller(title) {
-    // Reset State
     instProgress.style.width = '0%';
     percentLabel.innerText = '0%';
     instTitle.innerText = title;
@@ -36,10 +35,7 @@ function startInstaller(title) {
     instStatus.classList.remove('text-green-400', 'text-red-500');
     manualArea.classList.add('hidden');
     
-    // Munculkan Modal
     instModal.classList.remove('hidden');
-    
-    // Paksa browser merender animasi sebelum proses fetch dimulai
     requestAnimationFrame(() => {
         instModal.classList.add('opacity-100');
     });
@@ -64,36 +60,26 @@ async function triggerDownload(url, filename) {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(dUrl);
         return true;
-    } catch(e) { 
-        console.error("Download failed", e);
-        return false; 
-    }
+    } catch(e) { return false; }
 }
 
 // --- TIKTOK LOGIC ---
 async function downloadTikTok(mode) {
     const url = document.getElementById('ttUrl').value.trim();
     if(!url) return;
-
     startInstaller(mode === 'audio' ? "INSTALLING SOUND" : "INSTALLING VIDEO");
-
-    // Beri jeda sedikit agar animasi muncul mulus di mobile
     await new Promise(r => setTimeout(r, 600));
 
     try {
         updateProgress(30, "FETCHING FROM NEURAL LINK...");
         const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
         const json = await res.json();
-        
         if(json.code === 0) {
             const mediaUrl = mode === 'audio' ? json.data.music : json.data.play;
             updateProgress(60, "EXTRACTING DATA...");
-            
             manualLink.href = mediaUrl;
             manualArea.classList.remove('hidden');
-
             const success = await triggerDownload(mediaUrl, `X14_${Date.now()}.${mode === 'audio' ? 'mp3' : 'mp4'}`);
-            
             if(success) {
                 updateProgress(100, "INSTALLATION COMPLETE!");
                 instStatus.classList.add('text-green-400');
@@ -101,17 +87,9 @@ async function downloadTikTok(mode) {
                     instModal.classList.remove('opacity-100');
                     setTimeout(() => instModal.classList.add('hidden'), 400);
                 }, 2500);
-            } else {
-                updateProgress(100, "AUTO INSTALL BLOCKED");
-                instStatus.innerText = "TAP MANUAL LINK BELOW";
             }
-        } else {
-            throw new Error("Invalid Response");
         }
-    } catch(e) { 
-        updateProgress(100, "LINK ERROR / PROTECTED"); 
-        instStatus.classList.add('text-red-500'); 
-    }
+    } catch(e) { updateProgress(100, "ERROR"); instStatus.classList.add('text-red-500'); }
 }
 
 document.getElementById('ttBtn').onclick = () => downloadTikTok('video');
@@ -121,24 +99,20 @@ document.getElementById('ttAudioBtn').onclick = () => downloadTikTok('audio');
 document.getElementById('spotBtn').onclick = async () => {
     const url = document.getElementById('spotUrl').value.trim();
     if(!url || !url.includes('track/')) return;
-    
     startInstaller("INSTALLING SPOTIFY TRACK");
     await new Promise(r => setTimeout(r, 600));
 
     try {
         const trackId = url.split('track/')[1].split('?')[0];
         updateProgress(40, "SYNCING WITH SPOTIFY...");
-        
         const res = await fetch(`https://api.spotifydown.com/download/${trackId}`, {
             headers: { 'Origin': 'https://spotifydown.com' }
         });
         const json = await res.json();
-        
         if(json.success) {
-            updateProgress(70, "CONVERTING TO MP3...");
+            updateProgress(70, "CONVERTING MP3...");
             manualLink.href = json.link;
             manualArea.classList.remove('hidden');
-            
             const success = await triggerDownload(json.link, `${json.metadata.title}.mp3`);
             if(success) {
                 updateProgress(100, "SYNC COMPLETE!");
@@ -149,13 +123,10 @@ document.getElementById('spotBtn').onclick = async () => {
                 }, 2500);
             }
         }
-    } catch(e) { 
-        updateProgress(100, "SPOTIFY SYNC FAILED"); 
-        instStatus.classList.add('text-red-500'); 
-    }
+    } catch(e) { updateProgress(100, "SYNC FAILED"); instStatus.classList.add('text-red-500'); }
 };
 
-// --- CHAT ENGINE (Tetap sama) ---
+// --- CHAT ENGINE ---
 function createBubble(text, role) {
     const b = document.createElement('div');
     b.className = `chat-bubble bubble-${role}`;
@@ -173,7 +144,6 @@ sendBtn.onclick = async () => {
     typing.className = 'chat-bubble bubble-ai w-16 flex gap-1 items-center justify-center';
     typing.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
     chatArea.appendChild(typing);
-
     try {
         const response = await fetch("https://api.chatanywhere.tech/v1/chat/completions", {
             method: "POST",
@@ -183,12 +153,9 @@ sendBtn.onclick = async () => {
         const data = await response.json();
         typing.remove();
         createBubble(data.choices[0].message.content, 'ai');
-    } catch (e) { typing.remove(); createBubble("Neural connection disrupted.", "ai"); }
+    } catch (e) { typing.remove(); createBubble("Error.", "ai"); }
 };
 
 window.onload = () => {
-    setTimeout(() => {
-        const loader = document.getElementById('loading');
-        if(loader) loader.remove();
-    }, 1000);
+    setTimeout(() => document.getElementById('loading').remove(), 1000);
 };
