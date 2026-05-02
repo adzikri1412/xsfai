@@ -26,14 +26,23 @@ const API_KEY = "sk-Xwuy2wMYjTTZIUbBuHUewSsu6Na8RkUjBvYiDgHdJFTCw0aX";
 menuBtn.onclick = () => sidebar.classList.add('open');
 document.getElementById('closeBtn').onclick = () => sidebar.classList.remove('open');
 
-// --- INSTALLER UI ---
+// --- FIXED INSTALLER UI FUNCTION ---
 function startInstaller(title) {
+    // Reset State
+    instProgress.style.width = '0%';
+    percentLabel.innerText = '0%';
     instTitle.innerText = title;
-    instModal.classList.remove('hidden');
-    manualArea.classList.add('hidden');
+    instStatus.innerText = "INITIALIZING...";
     instStatus.classList.remove('text-green-400', 'text-red-500');
-    updateProgress(10, "INITIALIZING...");
-    setTimeout(() => instModal.classList.add('opacity-100'), 10);
+    manualArea.classList.add('hidden');
+    
+    // Munculkan Modal
+    instModal.classList.remove('hidden');
+    
+    // Paksa browser merender animasi sebelum proses fetch dimulai
+    requestAnimationFrame(() => {
+        instModal.classList.add('opacity-100');
+    });
 }
 
 function updateProgress(p, status) {
@@ -53,65 +62,100 @@ async function triggerDownload(url, filename) {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        window.URL.revokeObjectURL(dUrl);
         return true;
-    } catch(e) { return false; }
+    } catch(e) { 
+        console.error("Download failed", e);
+        return false; 
+    }
 }
 
-// --- TIKTOK (VIDEO & AUDIO) ---
+// --- TIKTOK LOGIC ---
 async function downloadTikTok(mode) {
     const url = document.getElementById('ttUrl').value.trim();
     if(!url) return;
+
     startInstaller(mode === 'audio' ? "INSTALLING SOUND" : "INSTALLING VIDEO");
 
+    // Beri jeda sedikit agar animasi muncul mulus di mobile
+    await new Promise(r => setTimeout(r, 600));
+
     try {
+        updateProgress(30, "FETCHING FROM NEURAL LINK...");
         const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
         const json = await res.json();
+        
         if(json.code === 0) {
             const mediaUrl = mode === 'audio' ? json.data.music : json.data.play;
-            updateProgress(50, "CONNECTING TO NEURAL LINK...");
+            updateProgress(60, "EXTRACTING DATA...");
             
             manualLink.href = mediaUrl;
             manualArea.classList.remove('hidden');
 
             const success = await triggerDownload(mediaUrl, `X14_${Date.now()}.${mode === 'audio' ? 'mp3' : 'mp4'}`);
+            
             if(success) {
                 updateProgress(100, "INSTALLATION COMPLETE!");
                 instStatus.classList.add('text-green-400');
+                setTimeout(() => {
+                    instModal.classList.remove('opacity-100');
+                    setTimeout(() => instModal.classList.add('hidden'), 400);
+                }, 2500);
             } else {
-                updateProgress(100, "AUTO INSTALL FAILED - USE MANUAL LINK");
+                updateProgress(100, "AUTO INSTALL BLOCKED");
+                instStatus.innerText = "TAP MANUAL LINK BELOW";
             }
+        } else {
+            throw new Error("Invalid Response");
         }
-    } catch(e) { updateProgress(100, "ERROR: LINK INVALID"); instStatus.classList.add('text-red-500'); }
+    } catch(e) { 
+        updateProgress(100, "LINK ERROR / PROTECTED"); 
+        instStatus.classList.add('text-red-500'); 
+    }
 }
 
 document.getElementById('ttBtn').onclick = () => downloadTikTok('video');
 document.getElementById('ttAudioBtn').onclick = () => downloadTikTok('audio');
 
-// --- SPOTIFY ---
+// --- SPOTIFY LOGIC ---
 document.getElementById('spotBtn').onclick = async () => {
     const url = document.getElementById('spotUrl').value.trim();
-    if(!url) return;
+    if(!url || !url.includes('track/')) return;
+    
     startInstaller("INSTALLING SPOTIFY TRACK");
+    await new Promise(r => setTimeout(r, 600));
 
     try {
-        // Menggunakan API Spotify Downloader (Publik/DziyX Bypass)
-        const res = await fetch(`https://api.spotifydown.com/download/${url.split('track/')[1].split('?')[0]}`, {
+        const trackId = url.split('track/')[1].split('?')[0];
+        updateProgress(40, "SYNCING WITH SPOTIFY...");
+        
+        const res = await fetch(`https://api.spotifydown.com/download/${trackId}`, {
             headers: { 'Origin': 'https://spotifydown.com' }
         });
         const json = await res.json();
+        
         if(json.success) {
-            updateProgress(60, "SYNCING METADATA...");
+            updateProgress(70, "CONVERTING TO MP3...");
             manualLink.href = json.link;
             manualArea.classList.remove('hidden');
             
-            await triggerDownload(json.link, `${json.metadata.title}.mp3`);
-            updateProgress(100, "SYNC COMPLETE!");
-            instStatus.classList.add('text-green-400');
+            const success = await triggerDownload(json.link, `${json.metadata.title}.mp3`);
+            if(success) {
+                updateProgress(100, "SYNC COMPLETE!");
+                instStatus.classList.add('text-green-400');
+                setTimeout(() => {
+                    instModal.classList.remove('opacity-100');
+                    setTimeout(() => instModal.classList.add('hidden'), 400);
+                }, 2500);
+            }
         }
-    } catch(e) { updateProgress(100, "SPOTIFY SYNC FAILED"); instStatus.classList.add('text-red-500'); }
+    } catch(e) { 
+        updateProgress(100, "SPOTIFY SYNC FAILED"); 
+        instStatus.classList.add('text-red-500'); 
+    }
 };
 
-// --- CHAT ENGINE ---
+// --- CHAT ENGINE (Tetap sama) ---
 function createBubble(text, role) {
     const b = document.createElement('div');
     b.className = `chat-bubble bubble-${role}`;
@@ -143,6 +187,8 @@ sendBtn.onclick = async () => {
 };
 
 window.onload = () => {
-    setTimeout(() => document.getElementById('loading').remove(), 1000);
-    createBubble("System ready. All download protocols (TikTok & Spotify) are active.", "ai");
+    setTimeout(() => {
+        const loader = document.getElementById('loading');
+        if(loader) loader.remove();
+    }, 1000);
 };
